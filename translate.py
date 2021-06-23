@@ -6,6 +6,8 @@ from scipy.io.wavfile import write
 from flask_restx import Namespace, Resource, reqparse
 from flask import send_file, after_this_request
 
+import subprocess
+
 api = Namespace('Translator', description='번역 API', path='/translate')
 
 parser = reqparse.RequestParser()
@@ -114,19 +116,33 @@ class TranslateResource(Resource):
         sentence = args.sentence
         base_key = args.base_key
         speed = args.speed
-        filepath = sentence + '.wav'
 
         inst1 = Note(speed)
         inst2 = Note(speed)
         consonant, vowel = translate(sentence, stdnote=base_key)
+        sentence = sentence.replace(' ', '')
+        filepath = sentence[:6] + '.wav'
         inst1.setNotesfromcode(consonant)
         inst2.setNotesfromcode(vowel)
         data = inst1.getSongdata(inst=Note.ppSound) + inst2.getSongdata(inst=Note.xyloSound)
-        write(sentence+'.wav', 44100, data)
+        write(filepath, 44100, data)
+        try:
+            os.remove(os.getcwd() + "\\" + sentence[:6]+'.mp3')
+        except:
+            print("No file to delete")
+        cmd = 'ffmpeg -i {} -vn -ar 44100 -ac 2 -b:a 192k {}'.format(filepath, sentence[:6]+'.mp3')
+        subprocess.call(cmd, shell=True)
+        filepath = sentence[:6]+'.mp3'
 
         @after_this_request
         def remove_file(response):
-            os.remove(os.getcwd() + '/' + filepath)
+            for path, dirname, filename in os.walk(os.getcwd()):
+                for file in filename:
+                    if file.split('.')[1] in ["wav", "mp3"]:
+                        try:
+                            os.remove(path + "\\" + file)
+                        except Exception as e:
+                            print("Delete {} failed".format(file))
             return response
 
-        return send_file(filepath, mimetype="audio/wav", as_attachment=True, attachment_filename=filepath)
+        return send_file(filepath, mimetype="audio/mp3", as_attachment=True, attachment_filename=filepath)
